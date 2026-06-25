@@ -198,7 +198,7 @@ export const fetchDailyPropers = async (date: string, occasion?: string): Promis
   try {
     // Switch to flash-preview to avoid 429 errors on Pro, while still capable of this task.
     const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview', 
+      model: 'gemini-3.5-flash', 
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -236,7 +236,7 @@ export const translateText = async (text: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       contents: `Translate the following Latin liturgical text into beautiful, traditional English (Roman Missal style). 
       
       STRICT RULES:
@@ -281,7 +281,7 @@ export const resolveLiturgicalDay = async (
 
   try {
     const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -324,7 +324,7 @@ export const summarizeReadings = async (items: LiturgyItem[]): Promise<LiturgyIt
 
   try {
     const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       contents: prompt,
       config: { responseMimeType: 'application/json', responseSchema: schema }
     })) as GenerateContentResponse;
@@ -419,7 +419,7 @@ export const importLiturgyFromPdf = async (base64Pdf: string): Promise<{ items: 
 
   try {
     const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       contents: [
         { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
         { text: prompt }
@@ -758,7 +758,7 @@ export const processLiturgyEdit = async (currentItems: LiturgyItem[], userInstru
 
   try {
     const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
