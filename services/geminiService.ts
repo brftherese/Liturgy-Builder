@@ -254,6 +254,53 @@ export const translateText = async (text: string): Promise<string> => {
   }
 };
 
+export const translateTexts = async (texts: string[]): Promise<string[]> => {
+  if (!process.env.API_KEY) return [];
+  if (!texts || texts.length === 0) return [];
+  
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const schema: Schema = {
+    type: Type.ARRAY,
+    items: { type: Type.STRING }
+  };
+
+  const prompt = `
+    Translate the following list of Latin liturgical texts into beautiful, traditional English (Roman Missal style).
+    
+    STRICT RULES:
+    1. Translate each item in the list.
+    2. Maintain the exact same order as the input list.
+    3. If any item is chant with hyphens (e.g. Do-mi-nus), remove them in the translation (Lord).
+    
+    Input List:
+    ${JSON.stringify(texts)}
+  `;
+
+  try {
+    const response = await retryOperation(() => ai.models.generateContent({
+      model: 'gemini-3.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: schema
+      }
+    })) as GenerateContentResponse;
+    
+    return JSON.parse(response.text || '[]');
+  } catch (e) {
+    console.error("Batch translation failed:", e);
+    const results: string[] = [];
+    for (const t of texts) {
+      try {
+        results.push(await translateText(t));
+      } catch (err) {
+        results.push("Translation failed.");
+      }
+    }
+    return results;
+  }
+};
+
 export const resolveLiturgicalDay = async (
   type: 'date_to_feast' | 'feast_to_date',
   value: string
@@ -516,15 +563,12 @@ export const enrichLiturgyItems = async (items: LiturgyItem[], date: string, occ
         console.warn("Could not fetch standard propers", e);
     }
 
-    // 2. Enrich Existing Items (from PDF)
-    // CRITICAL: We process sequentially to avoid hitting Gemini Rate Limits (429) during translation of multiple items.
-    const enrichedItems: LiturgyItem[] = [];
-    
-    for (const item of items) {
+    // 2. First Pass: Match and identify what needs translation
+    const itemsToTranslate: { index: number, latin: string }[] = [];
+    const preEnrichedItems = items.map((item, idx) => {
         // Skip hymnal items
         if (item.metadata?.pageNumber) {
-             enrichedItems.push(item);
-             continue;
+             return item;
         }
 
         const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -534,19 +578,22 @@ export const enrichLiturgyItems = async (items: LiturgyItem[], date: string, occ
         let hasEnglish = item.content.length > 5 && !isLatinText(item.content);
         let hasLatin = !!(item.metadata?.latinContent && item.metadata.latinContent.length > 5);
 
+        let newContent = item.content;
+        let newMetadata = { ...item.metadata };
+
         // Logic to move Latin content from main slot to latin slot if needed
         if (!hasEnglish && isLatinText(item.content)) {
             if (!hasLatin || item.metadata?.latinContent === item.content) {
-                item.metadata = { ...item.metadata, latinContent: item.content };
+                newMetadata.latinContent = item.content;
                 hasLatin = true;
-                item.content = ""; 
+                newContent = ""; 
                 hasEnglish = false;
             }
         }
 
         // MATCHING
         let match: GeneratedProper | undefined;
-        // Refined matching: Don't match Motets/Anthems with Standard Propers (Antiphons)
+        // Refined matching: Don't match Motets/Anthems with Standard Propers (Chants)
         const isChoralPiece = itemTitleNorm.includes('motet') || itemTitleNorm.includes('anthem') || itemTitleNorm.includes('choir') || itemTitleNorm.includes('meditation');
 
         if (standardPropers.length > 0 && !isChoralPiece) {
@@ -576,9 +623,6 @@ export const enrichLiturgyItems = async (items: LiturgyItem[], date: string, occ
                 }
             }
         }
-
-        let newContent = item.content;
-        let newMetadata = { ...item.metadata };
 
         if (match) {
              const isGradual = itemTitleNorm.includes('gradual');
@@ -617,20 +661,35 @@ export const enrichLiturgyItems = async (items: LiturgyItem[], date: string, occ
              hasLatin = true;
         }
 
-        if (hasLatin && !hasEnglish) {
-             try {
-                 const translation = await translateText(newMetadata.latinContent!);
-                 newContent = translation;
-                 // Add small delay to be nice to the API quota
-                 await new Promise(r => setTimeout(r, 500));
-             } catch (e) { }
+        if (hasLatin && !hasEnglish && newMetadata.latinContent) {
+             itemsToTranslate.push({ index: idx, latin: newMetadata.latinContent });
         }
 
+        return { ...item, content: newContent, metadata: newMetadata };
+    });
+
+    // Run Batched Translations
+    if (itemsToTranslate.length > 0) {
+        try {
+            const translations = await translateTexts(itemsToTranslate.map(x => x.latin));
+            translations.forEach((translation, index) => {
+                const targetIdx = itemsToTranslate[index].index;
+                preEnrichedItems[targetIdx].content = translation;
+            });
+        } catch (e) {
+            console.error("Batch translation enrichment failed:", e);
+        }
+    }
+
+    // Clean texts and assemble enriched list
+    const enrichedItems = preEnrichedItems.map(item => {
+        if (item.metadata?.pageNumber) return item;
+        let newContent = item.content;
+        let newMetadata = { ...item.metadata };
         if (newContent) newContent = cleanLiturgicalText(newContent, item.title);
         if (newMetadata.latinContent) newMetadata.latinContent = cleanLiturgicalText(newMetadata.latinContent, item.title);
-
-        enrichedItems.push({ ...item, content: newContent, metadata: newMetadata });
-    }
+        return { ...item, content: newContent, metadata: newMetadata };
+    });
 
     // 3. INJECT MISSING READINGS
     // Identify landmarks to know where to insert
