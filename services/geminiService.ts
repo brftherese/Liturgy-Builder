@@ -38,6 +38,61 @@ const withTimeout = <T>(promise: Promise<T>, ms: number = 60000): Promise<T> => 
     ]);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FREE TIER HARD CAPS — prevents any paid usage even if the key supports billing.
+// These match the Google Gemini API free-tier daily limits (RPD).
+// Set a model's cap to 0 to disable it entirely.
+// ─────────────────────────────────────────────────────────────────────────────
+const FREE_TIER_CAPS: Record<string, number> = {
+    'gemini-3.1-pro-preview': 25,
+    'gemini-2.5-pro':         25,
+    'gemini-3.5-flash':     1500,
+    'gemini-2.5-flash':     1500,
+    'gemini-3.1-flash-lite': 1500,
+};
+
+const TRACKER_KEY = 'gemini_daily_usage';
+
+interface DailyUsage {
+    date: string; // YYYY-MM-DD UTC
+    counts: Record<string, number>;
+}
+
+const getUsage = (): DailyUsage => {
+    const todayUTC = new Date().toISOString().slice(0, 10);
+    try {
+        const stored = JSON.parse(localStorage.getItem(TRACKER_KEY) || '{}') as DailyUsage;
+        if (stored.date === todayUTC) return stored;
+    } catch (_) {}
+    // Reset for new day
+    return { date: todayUTC, counts: {} };
+};
+
+const recordUsage = (model: string) => {
+    const usage = getUsage();
+    usage.counts[model] = (usage.counts[model] || 0) + 1;
+    localStorage.setItem(TRACKER_KEY, JSON.stringify(usage));
+};
+
+const isWithinFreeTier = (model: string): boolean => {
+    const cap = FREE_TIER_CAPS[model];
+    if (cap === undefined) return true; // Unknown model — let Google decide
+    if (cap === 0) {
+        console.warn(`HARD CAP: ${model} is disabled (cap = 0).`);
+        return false;
+    }
+    const usage = getUsage();
+    const used = usage.counts[model] || 0;
+    if (used >= cap) {
+        console.warn(`HARD CAP: ${model} has reached its free tier daily limit (${used}/${cap}). Skipping to next model.`);
+        return false;
+    }
+    if (used >= cap * 0.8) {
+        console.warn(`FREE TIER WARNING: ${model} is at ${used}/${cap} daily requests (${Math.round(used/cap*100)}%).`);
+    }
+    return true;
+};
+
 export async function generateContentWithFallback(request: any): Promise<GenerateContentResponse> {
     const ai = getAI();
     let isRateLimit = false;
@@ -55,82 +110,99 @@ export async function generateContentWithFallback(request: any): Promise<Generat
         return err.message ? err.message.substring(0, 50) : "Unknown error";
     };
 
-    try {
-        return await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
-    } catch (error: any) {
-        failureReasons.push(`[${request.model}] ${getFriendlyErrorMessage(error)}`);
-        
-        const errString = JSON.stringify(error, Object.getOwnPropertyNames(error));
-        const msg = (error.message || '') + errString;
-        isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || (error?.status === 429);
-        isServerBusy = msg.includes('503') || msg.includes('Overloaded') || msg.includes('timed out') || msg.includes('Timeout after') || msg.includes('timeout') || (error?.status === 503);
-        
-        if (!isRateLimit && !isServerBusy) {
-            console.error("Gemini failed with non-retryable error:", error);
-            throw new Error(`Google AI Error: ${getFriendlyErrorMessage(error)}`);
-        }
-        
-        // Smart Retry Logic: If it's a short RPM quota hit, wait and retry the original model.
-        // SKIP if daily quota is exhausted — waiting 65s won't help at all.
-        if (isRateLimit && !msg.includes('PerDay')) {
-            const retryMatch = msg.match(/Please retry in ([\d\.]+)s/i);
-            if (retryMatch && retryMatch[1]) {
-                const delaySecs = parseFloat(retryMatch[1]);
-                if (delaySecs > 0 && delaySecs <= 65) {
-                    console.warn(`Smart Retry: Waiting ${delaySecs}s for ${request.model} to cool down (Per-Minute limit)...`);
-                    await new Promise(resolve => setTimeout(resolve, delaySecs * 1000 + 1000));
-                    try {
-                        console.warn(`Retrying ${request.model} after cooldown...`);
-                        return await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
-                    } catch (retryErr: any) {
-                        console.warn(`${request.model} failed again on retry. Moving to fallback chain...`);
-                        failureReasons.push(`[${request.model} Retry] ${getFriendlyErrorMessage(retryErr)}`);
+    // Check free-tier hard cap before sending the request
+    if (!isWithinFreeTier(request.model)) {
+        failureReasons.push(`[${request.model}] Hard cap reached — skipping`);
+        isRateLimit = true; // Treat as quota so fallback chain activates
+    } else {
+        try {
+            const primaryResult = await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
+            recordUsage(request.model);
+            return primaryResult;
+        } catch (error: any) {
+            failureReasons.push(`[${request.model}] ${getFriendlyErrorMessage(error)}`);
+            
+            const errString = JSON.stringify(error, Object.getOwnPropertyNames(error));
+            const msg = (error.message || '') + errString;
+            isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || (error?.status === 429);
+            isServerBusy = msg.includes('503') || msg.includes('Overloaded') || msg.includes('timed out') || msg.includes('Timeout after') || msg.includes('timeout') || (error?.status === 503);
+            
+            if (!isRateLimit && !isServerBusy) {
+                console.error("Gemini failed with non-retryable error:", error);
+                throw new Error(`Google AI Error: ${getFriendlyErrorMessage(error)}`);
+            }
+            
+            // Smart Retry Logic: If it's a short RPM quota hit, wait and retry the original model.
+            // SKIP if daily quota is exhausted — waiting 65s won't help at all.
+            if (isRateLimit && !msg.includes('PerDay')) {
+                const retryMatch = msg.match(/Please retry in ([\d\.]+)s/i);
+                if (retryMatch && retryMatch[1]) {
+                    const delaySecs = parseFloat(retryMatch[1]);
+                    if (delaySecs > 0 && delaySecs <= 65) {
+                        console.warn(`Smart Retry: Waiting ${delaySecs}s for ${request.model} to cool down (Per-Minute limit)...`);
+                        await new Promise(resolve => setTimeout(resolve, delaySecs * 1000 + 1000));
+                        try {
+                            console.warn(`Retrying ${request.model} after cooldown...`);
+                            const retryResult = await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
+                            recordUsage(request.model);
+                            return retryResult;
+                        } catch (retryErr: any) {
+                            console.warn(`${request.model} failed again on retry. Moving to fallback chain...`);
+                            failureReasons.push(`[${request.model} Retry] ${getFriendlyErrorMessage(retryErr)}`);
+                        }
                     }
                 }
             }
         }
-        
-        const isTranslation = request.model === 'gemini-3.1-flash-lite' || (typeof request.contents === 'string' && request.contents.includes('Translate the following Latin'));
-        
-        // Fallback chain: gemini-3.1-pro-preview is NOT available on the free tier (limit: 0).
-        // Available models: gemini-3.5-flash, gemini-2.5-flash, gemini-3.1-flash-lite
-        const fallbacks = ['gemini-2.5-flash', 'gemini-3.5-flash']
-            .filter(m => m !== request.model);
-        
-        for (const fallbackModel of fallbacks) {
-            console.warn(`Gemini API Busy on previous model. Falling back to ${fallbackModel}...`);
-            try {
-                const fallbackRequest = { ...request, model: fallbackModel };
-                return await withTimeout(ai.models.generateContent(fallbackRequest) as Promise<GenerateContentResponse>, 60000);
-            } catch (fallbackError: any) {
-                console.warn(`${fallbackModel} ALSO Busy/Failed (${fallbackError?.message}).`);
-                failureReasons.push(`[${fallbackModel}] ${getFriendlyErrorMessage(fallbackError)}`);
-            }
+    }
+
+    const isTranslation = request.model === 'gemini-3.1-flash-lite' || (typeof request.contents === 'string' && request.contents.includes('Translate the following Latin'));
+    
+    // Fallback chain (ordered by quality). Each model is checked against the free-tier hard cap first.
+    const fallbacks = (isTranslation
+        ? ['gemini-2.5-flash', 'gemini-3.5-flash']
+        : ['gemini-3.1-pro-preview', 'gemini-2.5-flash', 'gemini-3.5-flash']
+    ).filter(m => m !== request.model);
+    
+    for (const fallbackModel of fallbacks) {
+        if (!isWithinFreeTier(fallbackModel)) {
+            failureReasons.push(`[${fallbackModel}] Hard cap reached — skipping`);
+            continue;
         }
-        
-        // If we reach here, all Gemini models failed.
-        if (!isTranslation) {
-            throw new Error("All models failed.\n" + failureReasons.join(" | "));
-        }
-        
-        console.warn(`Falling back to Ollama (translategemma) for translation task...`);
+        console.warn(`Gemini API Busy on previous model. Falling back to ${fallbackModel}...`);
         try {
-            const ollamaModel = 'translategemma:latest';
-            const requireJson = request.config?.responseMimeType === 'application/json';
-            
-            let promptString = "";
-            if (typeof request.contents === 'string') {
-                promptString = request.contents;
-            } else if (Array.isArray(request.contents)) {
-                promptString = request.contents.map((p: any) => p.text || '').join('\n');
-            }
-            
-            const ollamaText = await fetchOllama(promptString, ollamaModel, requireJson);
-            return { text: ollamaText } as GenerateContentResponse;
-        } catch (error3: any) {
-             console.error("Ollama fallback ALSO failed:", error3);
-             throw new Error("All AI models (Gemini & local Ollama) failed to respond. Please try again later.");
+            const fallbackRequest = { ...request, model: fallbackModel };
+            const fallbackResult = await withTimeout(ai.models.generateContent(fallbackRequest) as Promise<GenerateContentResponse>, 60000);
+            recordUsage(fallbackModel);
+            return fallbackResult;
+        } catch (fallbackError: any) {
+            console.warn(`${fallbackModel} ALSO Busy/Failed (${fallbackError?.message}).`);
+            failureReasons.push(`[${fallbackModel}] ${getFriendlyErrorMessage(fallbackError)}`);
         }
+    }
+    
+    // If we reach here, all Gemini models failed.
+    if (!isTranslation) {
+        throw new Error("All models failed.\n" + failureReasons.join(" | "));
+    }
+    
+    console.warn(`Falling back to Ollama (translategemma) for translation task...`);
+    try {
+        const ollamaModel = 'translategemma:latest';
+        const requireJson = request.config?.responseMimeType === 'application/json';
+        
+        let promptString = "";
+        if (typeof request.contents === 'string') {
+            promptString = request.contents;
+        } else if (Array.isArray(request.contents)) {
+            promptString = request.contents.map((p: any) => p.text || '').join('\n');
+        }
+        
+        const ollamaText = await fetchOllama(promptString, ollamaModel, requireJson);
+        return { text: ollamaText } as GenerateContentResponse;
+    } catch (error3: any) {
+         console.error("Ollama fallback ALSO failed:", error3);
+         throw new Error("All AI models (Gemini & local Ollama) failed to respond. Please try again later.");
     }
 }
 
@@ -592,7 +664,7 @@ export const importLiturgyFromPdf = async (base64Pdf: string): Promise<{ items: 
 
   try {
     const response = await generateContentWithFallback({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-pro-preview',
       contents: [
         { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
         { text: prompt }
