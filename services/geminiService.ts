@@ -1,6 +1,143 @@
 import { GoogleGenAI, Type, Schema, GenerateContentResponse } from "@google/genai";
 import { GeneratedProper, LiturgyItem, MassMetadata } from '../types';
 
+let aiInstance: GoogleGenAI | null = null;
+const getAI = (): GoogleGenAI => {
+  if (!process.env.API_KEY && !process.env.VITE_GEMINI_API_KEY) {
+    throw new Error("API Key is missing. Please configure the environment.");
+  }
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.VITE_GEMINI_API_KEY || "" });
+  }
+  return aiInstance;
+};
+async function fetchOllama(prompt: string, model: string, requireJson: boolean): Promise<string> {
+    const payload = {
+        model: model,
+        prompt: prompt,
+        stream: false,
+        ...(requireJson ? { format: "json" } : {})
+    };
+    const response = await fetch("https://ollama.csjohn.org/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.response;
+}
+
+// Timeout wrapper to prevent hanging promises if the SDK throws uncatchable errors
+const withTimeout = <T>(promise: Promise<T>, ms: number = 60000): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms))
+    ]);
+};
+
+export async function generateContentWithFallback(request: any): Promise<GenerateContentResponse> {
+    const ai = getAI();
+    let isRateLimit = false;
+    let isServerBusy = false;
+    const failureReasons: string[] = [];
+    
+    const getFriendlyErrorMessage = (err: any): string => {
+        const errString = JSON.stringify(err, Object.getOwnPropertyNames(err));
+        const msg = (err.message || '') + errString;
+        if (msg.includes('PerDay')) return "Exhausted DAILY quota (resets at midnight PT)";
+        if (msg.includes('PerMinute')) return "Exhausted Per-Minute quota";
+        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) return "Quota limit reached";
+        if (msg.includes('503') || msg.includes('Overloaded')) return "Google servers are overloaded";
+        if (msg.includes('Timeout') || msg.includes('timed out')) return "Request timed out";
+        return err.message ? err.message.substring(0, 50) : "Unknown error";
+    };
+
+    try {
+        return await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
+    } catch (error: any) {
+        failureReasons.push(`[${request.model}] ${getFriendlyErrorMessage(error)}`);
+        
+        const errString = JSON.stringify(error, Object.getOwnPropertyNames(error));
+        const msg = (error.message || '') + errString;
+        isRateLimit = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || (error?.status === 429);
+        isServerBusy = msg.includes('503') || msg.includes('Overloaded') || msg.includes('timed out') || msg.includes('Timeout after') || msg.includes('timeout') || (error?.status === 503);
+        
+        if (!isRateLimit && !isServerBusy) {
+            console.error("Gemini failed with non-retryable error:", error);
+            throw new Error(`Google AI Error: ${getFriendlyErrorMessage(error)}`);
+        }
+        
+        // Smart Retry Logic: If it's a short RPM quota hit, wait and retry the original model
+        if (isRateLimit) {
+            const retryMatch = msg.match(/Please retry in ([\d\.]+)s/i);
+            if (retryMatch && retryMatch[1]) {
+                const delaySecs = parseFloat(retryMatch[1]);
+                if (delaySecs > 0 && delaySecs <= 65) {
+                    console.warn(`Smart Retry: Waiting ${delaySecs} seconds for ${request.model} to cool down...`);
+                    // Wait the requested delay plus a 1-second buffer
+                    await new Promise(resolve => setTimeout(resolve, delaySecs * 1000 + 1000));
+                    try {
+                        console.warn(`Retrying ${request.model} after cooldown...`);
+                        return await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
+                    } catch (retryErr: any) {
+                        console.warn(`${request.model} failed again on retry (${retryErr?.message}). Moving to fallback chain...`);
+                        failureReasons.push(`[${request.model} Retry] ${getFriendlyErrorMessage(retryErr)}`);
+                    }
+                }
+            }
+        }
+        
+        const isTranslation = request.model === 'gemini-3.1-flash-lite' || (typeof request.contents === 'string' && request.contents.includes('Translate the following Latin'));
+        
+        // Fallback chain: use pro-preview for heavy tasks, otherwise use 2.5-flash
+        let fallbacks: string[] = [];
+        if (isTranslation) {
+            fallbacks = ['gemini-2.5-flash'];
+        } else {
+            fallbacks = ['gemini-3.1-pro-preview', 'gemini-2.5-flash'];
+        }
+        fallbacks = fallbacks.filter(m => m !== request.model);
+        
+        for (const fallbackModel of fallbacks) {
+            console.warn(`Gemini API Busy on previous model. Falling back to ${fallbackModel}...`);
+            try {
+                const fallbackRequest = { ...request, model: fallbackModel };
+                return await withTimeout(ai.models.generateContent(fallbackRequest) as Promise<GenerateContentResponse>, 60000);
+            } catch (fallbackError: any) {
+                console.warn(`${fallbackModel} ALSO Busy/Failed (${fallbackError?.message}).`);
+                failureReasons.push(`[${fallbackModel}] ${getFriendlyErrorMessage(fallbackError)}`);
+            }
+        }
+        
+        // If we reach here, all Gemini models failed.
+        if (!isTranslation) {
+            throw new Error("All models failed.\n" + failureReasons.join(" | "));
+        }
+        
+        console.warn(`Falling back to Ollama (translategemma) for translation task...`);
+        try {
+            const ollamaModel = 'translategemma:latest';
+            const requireJson = request.config?.responseMimeType === 'application/json';
+            
+            let promptString = "";
+            if (typeof request.contents === 'string') {
+                promptString = request.contents;
+            } else if (Array.isArray(request.contents)) {
+                promptString = request.contents.map((p: any) => p.text || '').join('\n');
+            }
+            
+            const ollamaText = await fetchOllama(promptString, ollamaModel, requireJson);
+            return { text: ollamaText } as GenerateContentResponse;
+        } catch (error3: any) {
+             console.error("Ollama fallback ALSO failed:", error3);
+             throw new Error("All AI models (Gemini & local Ollama) failed to respond. Please try again later.");
+        }
+    }
+}
+
 // Helper to handle API Rate Limiting (Exponential Backoff)
 const retryOperation = async <T>(operation: () => Promise<T>, maxRetries = 5, initialDelay = 4000): Promise<T> => {
     let lastError: any;
@@ -197,14 +334,14 @@ export const fetchDailyPropers = async (date: string, occasion?: string): Promis
 
   try {
     // Switch to flash-preview to avoid 429 errors on Pro, while still capable of this task.
-    const response = await retryOperation(() => ai.models.generateContent({
+    const response = await generateContentWithFallback({
       model: 'gemini-3.5-flash', 
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         responseSchema: properSchema,
       }
-    })) as GenerateContentResponse;
+    });
 
     const text = response.text;
     if (!text) return [];
@@ -235,8 +372,8 @@ export const translateText = async (text: string): Promise<string> => {
   
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
-    const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback({
+      model: 'gemini-3.1-flash-lite',
       contents: `Translate the following Latin liturgical text into beautiful, traditional English (Roman Missal style). 
       
       STRICT RULES:
@@ -246,7 +383,7 @@ export const translateText = async (text: string): Promise<string> => {
       4. If the input is chant with hyphens (Do-mi-nus), remove them in the output (Lord).
       
       Latin: "${text}"`,
-    })) as GenerateContentResponse;
+    });
     return response.text?.trim() || "";
   } catch (e) {
     console.error(e);
@@ -277,27 +414,20 @@ export const translateTexts = async (texts: string[]): Promise<string[]> => {
   `;
 
   try {
-    const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback({
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         responseSchema: schema
       }
-    })) as GenerateContentResponse;
+    });
     
     return JSON.parse(response.text || '[]');
   } catch (e) {
-    console.error("Batch translation failed:", e);
-    const results: string[] = [];
-    for (const t of texts) {
-      try {
-        results.push(await translateText(t));
-      } catch (err) {
-        results.push("Translation failed.");
-      }
-    }
-    return results;
+    console.error("Batch translation failed completely (all fallback models exhausted).", e);
+    // DO NOT loop and spam individual requests here! If the API is exhausted, individual requests will also fail.
+    return texts.map(() => "Translation failed.");
   }
 };
 
@@ -327,14 +457,14 @@ export const resolveLiturgicalDay = async (
   };
 
   try {
-    const response = await retryOperation(() => ai.models.generateContent({
+    const response = await generateContentWithFallback({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         responseSchema: schema
       }
-    })) as GenerateContentResponse;
+    });
 
     return JSON.parse(response.text || '{}');
   } catch (e) {
@@ -370,11 +500,11 @@ export const summarizeReadings = async (items: LiturgyItem[]): Promise<LiturgyIt
   };
 
   try {
-    const response = await retryOperation(() => ai.models.generateContent({
+    const response = await generateContentWithFallback({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: { responseMimeType: 'application/json', responseSchema: schema }
-    })) as GenerateContentResponse;
+    });
 
     const updates = JSON.parse(response.text || '[]') as {id: string, newContent: string}[];
     return items.map(item => {
@@ -465,8 +595,8 @@ export const importLiturgyFromPdf = async (base64Pdf: string): Promise<{ items: 
   };
 
   try {
-    const response = await retryOperation(() => ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+    const response = await generateContentWithFallback({
+      model: 'gemini-3.1-pro-preview',
       contents: [
         { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
         { text: prompt }
@@ -475,7 +605,7 @@ export const importLiturgyFromPdf = async (base64Pdf: string): Promise<{ items: 
         responseMimeType: 'application/json',
         responseSchema: schema,
       }
-    })) as GenerateContentResponse;
+    });
 
     const result = JSON.parse(response.text || '{}');
     
@@ -816,14 +946,14 @@ export const processLiturgyEdit = async (currentItems: LiturgyItem[], userInstru
   };
 
   try {
-    const response = await retryOperation(() => ai.models.generateContent({
+    const response = await generateContentWithFallback({
       model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         responseSchema: schema,
       }
-    })) as GenerateContentResponse;
+    });
 
     const result = JSON.parse(response.text || '{}');
     return { 

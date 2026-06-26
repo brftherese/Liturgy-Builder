@@ -398,7 +398,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ items, setItems, met
   };
 
   return (
-    <div className="flex-1 bg-gray-100/50 h-full flex flex-col relative overflow-hidden font-sans">
+    <div className="flex-1 bg-stone-100/50 h-full flex flex-col relative overflow-hidden font-sans">
       
       {/* Inject Dynamic Print Styles for Main Window Printing (Ctrl+P) */}
       <style>{`
@@ -440,7 +440,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ items, setItems, met
          <div ref={hiddenMeasureRef}><ContentInner /></div>
       </div>
 
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between gap-4 z-20 shadow-sm shrink-0 no-print">
+      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 px-6 py-3 flex items-center justify-between gap-4 z-20 shadow-sm shrink-0 no-print">
             <div className="flex items-center gap-3">
                 <div className="relative group">
                      <select 
@@ -544,7 +544,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ items, setItems, met
       </div>
 
       {showSettings && (
-            <div className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm z-10 animate-in slide-in-from-top-2 duration-200 no-print">
+            <div className="bg-white/95 backdrop-blur-md border-b border-gray-200/50 px-6 py-4 shadow-sm z-10 animate-in slide-in-from-top-2 duration-200 no-print relative">
                 <div className="max-w-4xl mx-auto">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2"><Settings2 size={12}/> Manual Adjustments</h3>
@@ -593,7 +593,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ items, setItems, met
             </div>
       )}
 
-      <div className="flex-1 overflow-auto bg-gray-100/50 relative print-reset-height p-8 md:p-12 print:p-0">
+      <div className="flex-1 overflow-auto relative print-reset-height p-8 md:p-12 print:p-0">
         <div 
           className="relative mx-auto transition-all duration-200 ease-in-out origin-top-left"
           style={{ 
@@ -614,7 +614,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ items, setItems, met
                 {Array.from({ length: totalPages }).map((_, i) => (
                 <div 
                     key={i} 
-                    className="bg-white shadow-xl border border-gray-200/50 relative"
+                    className="bg-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] ring-1 ring-black/5 relative"
                     style={{ width: `${pageWidthPx}px`, height: `${pageHeightPx}px` }}
                 >
                     <span className="absolute bottom-2 right-4 text-[10px] text-gray-300 font-mono">Page {i + 1}</span>

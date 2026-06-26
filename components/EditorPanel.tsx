@@ -319,7 +319,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
   };
 
   return (
-    <div className="no-print flex flex-col h-full bg-white border-r border-gray-200 shadow-sm z-10 w-[420px] flex-shrink-0 relative">
+    <div className="no-print flex flex-col h-full bg-white/95 backdrop-blur-xl border-r border-gray-200/50 shadow-2xl z-10 w-[420px] flex-shrink-0 relative">
       <input type="file" ref={fileInputRef} onChange={handlePdfUpload} accept="application/pdf" className="hidden" />
       {showFeastModal && (
         <div className="absolute inset-0 z-50 bg-black/10 backdrop-blur-[1px] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -341,10 +341,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
             </div>
         </div>
       )}
-      <div className="flex border-b border-gray-200">
-        <button onClick={() => setActiveTab('build')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'build' ? 'text-church-700 border-b-2 border-church-600 bg-church-50' : 'text-gray-500 hover:text-church-600'}`}><GripVertical size={16} /> Builder</button>
-        <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'chat' ? 'text-church-700 border-b-2 border-church-600 bg-church-50' : 'text-gray-500 hover:text-church-600'}`}><MessageSquare size={16} /> Chat</button>
-        <button onClick={() => setActiveTab('settings')} className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'settings' ? 'text-church-700 border-b-2 border-church-600 bg-church-50' : 'text-gray-500 hover:text-church-600'}`}><Settings size={16} /> Details</button>
+      <div className="flex bg-gray-50/80 p-1.5 gap-1 border-b border-gray-200/50">
+        <button onClick={() => setActiveTab('build')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'build' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><GripVertical size={16} /> Builder</button>
+        <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'chat' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><MessageSquare size={16} /> Chat</button>
+        <button onClick={() => setActiveTab('settings')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'settings' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><Settings size={16} /> Details</button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col">
         {activeTab === 'settings' && (
@@ -352,14 +352,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
              <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Mass Details</h3>
                 <div className="flex gap-1">
-                    <button onClick={undo} disabled={!canUndo} className="p-1.5 border border-gray-200 bg-white rounded shadow-sm text-gray-600 hover:text-church-700 disabled:opacity-30 transition-all" title="Undo"><Undo2 size={14}/></button>
-                    <button onClick={resetApp} className="p-1.5 border border-gray-200 bg-white rounded shadow-sm text-gray-600 hover:text-red-600 transition-all" title="Reset All Content & Layout"><RotateCcw size={14}/></button>
+                    <button onClick={undo} disabled={!canUndo} className="p-1.5 border border-gray-200 bg-white rounded-md shadow-sm text-gray-600 hover:text-church-700 hover:shadow disabled:opacity-30 transition-all" title="Undo"><Undo2 size={14}/></button>
+                    <button onClick={resetApp} className="p-1.5 border border-gray-200 bg-white rounded-md shadow-sm text-gray-600 hover:text-red-600 hover:shadow transition-all" title="Reset All Content & Layout"><RotateCcw size={14}/></button>
                 </div>
              </div>
              <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Church Name</label>
-                <input type="text" value={metadata.churchName} onChange={(e) => setMetadata({...metadata, churchName: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
+                <input type="text" value={metadata.churchName} onChange={(e) => setMetadata({...metadata, churchName: e.target.value})} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                  <div>
@@ -373,7 +373,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Time</label>
-                  <input type="text" value={metadata.time} onChange={(e) => setMetadata({...metadata, time: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
+                  <input type="text" value={metadata.time} onChange={(e) => setMetadata({...metadata, time: e.target.value})} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
                 </div>
               </div>
               <div>
@@ -388,17 +388,17 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Mass Ordinary Setting</label>
                 <div className="relative">
-                    <input list="ordinary-settings" type="text" value={metadata.ordinarySetting} onChange={handleOrdinarySettingChange} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" placeholder="Select or type a setting..." />
+                    <input list="ordinary-settings" type="text" value={metadata.ordinarySetting} onChange={handleOrdinarySettingChange} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" placeholder="Select or type a setting..." />
                     <datalist id="ordinary-settings">{COMMON_ORDINARIES.map(o => <option key={o} value={o} />)}</datalist>
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Celebrant</label>
-                <input type="text" value={metadata.celebrant} onChange={(e) => setMetadata({...metadata, celebrant: e.target.value})} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
+                <input type="text" value={metadata.celebrant} onChange={(e) => setMetadata({...metadata, celebrant: e.target.value})} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
               </div>
              </div>
              <div className="pt-4 border-t border-gray-100">
-                <button onClick={handleAutoPopulate} disabled={isGenerating} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-church-600 to-church-800 text-white rounded-md py-2.5 text-sm font-medium hover:from-church-700 hover:to-church-900 transition-all disabled:opacity-50">
+                <button onClick={handleAutoPopulate} disabled={isGenerating} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-church-600 to-church-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 disabled:transform-none">
                   {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <><Wand2 size={16} /> Auto-Populate Propers</>}
                 </button>
              </div>
@@ -409,8 +409,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
                 <div className="flex items-center justify-between pb-2 border-b border-gray-100 mb-2">
                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">Assistant</span>
                      <div className="flex gap-1">
-                         <button onClick={undo} disabled={!canUndo} className="p-1.5 border border-gray-200 bg-white rounded shadow-sm text-gray-600 hover:text-church-700 disabled:opacity-30 transition-all" title="Undo"><Undo2 size={14}/></button>
-                         <button onClick={resetApp} className="p-1.5 border border-gray-200 bg-white rounded shadow-sm text-gray-600 hover:text-red-600 transition-all" title="Reset All Content & Layout"><RotateCcw size={14}/></button>
+                         <button onClick={undo} disabled={!canUndo} className="p-1.5 border border-gray-200 bg-white rounded-md shadow-sm text-gray-600 hover:text-church-700 hover:shadow disabled:opacity-30 transition-all" title="Undo"><Undo2 size={14}/></button>
+                         <button onClick={resetApp} className="p-1.5 border border-gray-200 bg-white rounded-md shadow-sm text-gray-600 hover:text-red-600 hover:shadow transition-all" title="Reset All Content & Layout"><RotateCcw size={14}/></button>
                      </div>
                 </div>
                 <div className="flex-1 overflow-y-auto space-y-4 p-1">
@@ -436,12 +436,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
         )}
         {activeTab === 'build' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="flex gap-2 mb-2">
-                 <button onClick={triggerFileUpload} disabled={isImporting} className="flex-1 flex items-center justify-center gap-2 bg-slate-800 text-white p-2.5 rounded shadow-sm hover:bg-slate-700 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-70">
+             <div className="flex gap-2 mb-3">
+                 <button onClick={triggerFileUpload} disabled={isImporting} className="flex-1 flex items-center justify-center gap-2 bg-stone-800 text-white p-2.5 rounded-lg shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-70 disabled:transform-none active:scale-95">
                    {isImporting ? <Loader2 size={14} className="animate-spin"/> : <FileUp size={14} />} {isImporting ? "Processing..." : "Import PDF"}
                  </button>
-                 <button onClick={undo} disabled={!canUndo} className="flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded shadow-sm hover:bg-gray-50 hover:text-church-700 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-40"><Undo2 size={14} /></button>
-                 <button onClick={resetApp} className="flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded shadow-sm hover:bg-gray-50 hover:text-red-600 transition-all text-xs font-bold uppercase tracking-wide" title="Reset All Content & Layout"><RotateCcw size={14} /></button>
+                 <button onClick={undo} disabled={!canUndo} className="flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded-lg shadow-sm hover:shadow hover:bg-gray-50 hover:text-church-700 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-40 active:scale-95"><Undo2 size={14} /></button>
+                 <button onClick={resetApp} className="flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded-lg shadow-sm hover:shadow hover:bg-gray-50 hover:text-red-600 transition-all text-xs font-bold uppercase tracking-wide active:scale-95" title="Reset All Content & Layout"><RotateCcw size={14} /></button>
             </div>
             {isImporting && importStatus && (
                 <div className="bg-church-50 rounded-md p-3 border border-church-100 shadow-sm animate-in fade-in slide-in-from-top-1">
@@ -461,8 +461,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
                 return (
                 <React.Fragment key={item.id}>
                     <div onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }} onDrop={(e) => handleDrop(e, index)} className={`transition-all duration-200 ${dragOverIndex === index ? 'h-8 bg-church-50 border-2 border-dashed border-church-400 rounded-md my-1 flex items-center justify-center text-xs text-church-600 font-medium' : isDragging ? 'h-2 my-0.5 rounded bg-gray-50 border border-dashed border-gray-300/50' : 'h-0 opacity-0 overflow-hidden'}`}>{dragOverIndex === index && <span className="flex items-center gap-1 pointer-events-none"><PlusCircle size={12}/> Drop to Insert</span>}</div>
-                    <div className={`group bg-white border border-gray-200 rounded-lg shadow-sm transition-all duration-200 overflow-hidden ${isExpanded ? 'ring-1 ring-church-500 shadow-md my-2' : 'hover:border-church-300'}`}>
-                      <div onClick={() => setExpandedId(isExpanded ? null : item.id)} className={`px-2 py-1.5 flex items-center justify-between cursor-pointer select-none ${isExpanded ? 'bg-gray-50 border-b border-gray-100 py-2' : 'bg-white'}`}>
+                    <div className={`group bg-white border border-gray-200/70 rounded-xl shadow-sm hover:shadow transition-all duration-200 overflow-hidden ${isExpanded ? 'ring-2 ring-church-500/20 border-church-300 shadow-md my-3' : 'hover:border-church-300'}`}>
+                      <div onClick={() => setExpandedId(isExpanded ? null : item.id)} className={`px-3 py-2 flex items-center justify-between cursor-pointer select-none transition-colors ${isExpanded ? 'bg-gray-50/80 border-b border-gray-200/60 py-2.5' : 'bg-white hover:bg-gray-50/50'}`}>
                         <div className="flex items-center gap-2 overflow-hidden w-full">
                           <span className="text-gray-400 shrink-0">{isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
                           <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white shrink-0 w-16 text-center ${item.type === 'hymn' ? 'bg-blue-600' : item.type === 'reading' ? 'bg-red-700' : item.type === 'proper' ? 'bg-amber-600' : item.type === 'ordinary' ? 'bg-slate-600' : 'bg-gray-500'}`}>{item.type}</span>

@@ -43,7 +43,7 @@ const App: React.FC = () => {
   }, [saveHistory]);
 
   return (
-    <div id="app-container" className="flex h-screen w-screen overflow-hidden bg-gray-100">
+    <div id="app-container" className="flex h-screen w-screen overflow-hidden bg-gradient-to-br from-stone-50 to-stone-200 text-stone-900">
       <div className="flex h-full w-full">
         <EditorPanel 
           items={items} 
