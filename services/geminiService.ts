@@ -1,16 +1,23 @@
 import { GoogleGenAI, Type, Schema, GenerateContentResponse } from "@google/genai";
 import { GeneratedProper, LiturgyItem, MassMetadata } from '../types';
 
-let aiInstance: GoogleGenAI | null = null;
-const getAI = (): GoogleGenAI => {
-  if (!process.env.API_KEY && !process.env.VITE_GEMINI_API_KEY) {
-    throw new Error("API Key is missing. Please configure the environment.");
-  }
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY || process.env.VITE_GEMINI_API_KEY || "" });
-  }
-  return aiInstance;
-};
+async function fetchFromGeminiProxy(request: any): Promise<GenerateContentResponse> {
+    const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(request)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        const error = new Error(data.error || 'Gemini Proxy Error');
+        (error as any).status = response.status;
+        Object.assign(error, data.details || {});
+        throw error;
+    }
+    return data;
+}
 async function fetchOllama(prompt: string, model: string, requireJson: boolean): Promise<string> {
     const payload = {
         model: model,
@@ -94,7 +101,6 @@ const isWithinFreeTier = (model: string): boolean => {
 };
 
 export async function generateContentWithFallback(request: any): Promise<GenerateContentResponse> {
-    const ai = getAI();
     let isRateLimit = false;
     let isServerBusy = false;
     const failureReasons: string[] = [];
@@ -116,7 +122,7 @@ export async function generateContentWithFallback(request: any): Promise<Generat
         isRateLimit = true; // Treat as quota so fallback chain activates
     } else {
         try {
-            const primaryResult = await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
+            const primaryResult = await withTimeout(fetchFromGeminiProxy(request), 60000);
             recordUsage(request.model);
             return primaryResult;
         } catch (error: any) {
@@ -143,7 +149,7 @@ export async function generateContentWithFallback(request: any): Promise<Generat
                         await new Promise(resolve => setTimeout(resolve, delaySecs * 1000 + 1000));
                         try {
                             console.warn(`Retrying ${request.model} after cooldown...`);
-                            const retryResult = await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
+                            const retryResult = await withTimeout(fetchFromGeminiProxy(request), 60000);
                             recordUsage(request.model);
                             return retryResult;
                         } catch (retryErr: any) {
@@ -172,7 +178,7 @@ export async function generateContentWithFallback(request: any): Promise<Generat
         console.warn(`Gemini API Busy on previous model. Falling back to ${fallbackModel}...`);
         try {
             const fallbackRequest = { ...request, model: fallbackModel };
-            const fallbackResult = await withTimeout(ai.models.generateContent(fallbackRequest) as Promise<GenerateContentResponse>, 60000);
+            const fallbackResult = await withTimeout(fetchFromGeminiProxy(fallbackRequest), 60000);
             recordUsage(fallbackModel);
             return fallbackResult;
         } catch (fallbackError: any) {
