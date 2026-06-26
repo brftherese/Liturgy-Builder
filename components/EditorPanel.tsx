@@ -7,8 +7,6 @@ import { COMMON_ORDINARIES } from '../constants';
 interface EditorPanelProps {
   items: LiturgyItem[];
   setItems: React.Dispatch<React.SetStateAction<LiturgyItem[]>>;
-  metadata: MassMetadata;
-  setMetadata: React.Dispatch<React.SetStateAction<MassMetadata>>;
   saveHistory: () => void;
   undo: () => void;
   canUndo: boolean;
@@ -20,13 +18,11 @@ interface ChatMessage {
     content: string;
 }
 
-export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metadata, setMetadata, saveHistory, undo, canUndo, resetApp }) => {
-  const [isGenerating, setIsGenerating] = useState(false);
+export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveHistory, undo, canUndo, resetApp }) => {
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string>(""); 
-  const [isLookingUp, setIsLookingUp] = useState<'date' | 'feast' | null>(null);
   const [translatingId, setTranslatingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'build' | 'settings' | 'chat'>('build');
+  const [activeTab, setActiveTab] = useState<'build' | 'chat'>('build');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -40,9 +36,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
   ]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Smart Populate State
-  const [feastOptions, setFeastOptions] = useState<string[]>([]);
-  const [showFeastModal, setShowFeastModal] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'chat' && chatEndRef.current) {
@@ -129,97 +122,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
     }
   };
 
-  const generatePropers = async (date: string, occasion: string, settingOverride?: string) => {
-    saveHistory();
-    setIsGenerating(true);
-    setExpandedId(null);
-    try {
-      const propers = await fetchDailyPropers(date, occasion);
-      const currentSetting = settingOverride || metadata.ordinarySetting;
-
-      const newItems: LiturgyItem[] = propers.map(p => {
-        const isCredo = p.title.toLowerCase().includes('creed') || p.title.toLowerCase().includes('credo');
-        let setting = undefined;
-        if (p.type === 'ordinary') {
-            setting = isCredo ? 'Credo III' : currentSetting;
-        }
-
-        return {
-          id: Math.random().toString(36).substr(2, 9),
-          type: p.type,
-          title: p.title,
-          content: p.text,
-          metadata: { 
-            reference: p.reference,
-            latinContent: p.latinText,
-            setting: setting
-          }
-        };
-      });
-      setItems(newItems);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to generate propers. Please check API key configuration.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleAutoPopulate = () => {
-    if (!metadata.date) return;
-    generatePropers(metadata.date, metadata.occasion);
-  };
-
-  const handleDateLookup = async () => {
-    if (!metadata.date) return;
-    setIsLookingUp('feast');
-    try {
-      const result = await resolveLiturgicalDay('date_to_feast', metadata.date);
-      if (result.suggestedMassSetting) {
-        setMetadata(prev => ({ ...prev, ordinarySetting: result.suggestedMassSetting! }));
-      }
-      const suggestedSetting = result.suggestedMassSetting;
-      if (result.feasts && result.feasts.length > 0) {
-        if (result.feasts.length === 1) {
-            const feast = result.feasts[0];
-            setMetadata(prev => ({ ...prev, occasion: feast }));
-            await generatePropers(metadata.date, feast, suggestedSetting);
-        } else {
-            setFeastOptions(result.feasts);
-            setShowFeastModal(true);
-        }
-      } else {
-        alert("No liturgical feasts found for this date.");
-      }
-    } catch (e) {
-      alert("Failed to lookup date.");
-    } finally {
-      setIsLookingUp(null);
-    }
-  };
-
-  const handleFeastLookup = async () => {
-    if (!metadata.occasion) return;
-    setIsLookingUp('date');
-    try {
-      const result = await resolveLiturgicalDay('feast_to_date', metadata.occasion);
-      if (result.date) {
-        setMetadata(prev => ({ ...prev, date: result.date! }));
-      } else {
-        alert("Could not find a date for this feast in the current year.");
-      }
-    } catch (e) {
-      alert("Failed to lookup feast.");
-    } finally {
-      setIsLookingUp(null);
-    }
-  };
-
-  const handleSelectFeast = async (feast: string) => {
-    setMetadata(prev => ({ ...prev, occasion: feast }));
-    setShowFeastModal(false);
-    await generatePropers(metadata.date, feast);
-  };
 
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -243,23 +145,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
             timeoutPromise
         ]);
         saveHistory();
-        const newMetadata = { ...metadata, ...result.metadata };
-        setMetadata(newMetadata);
-        setItems(result.items);
-        if (result.metadata.date) {
-            setImportStatus(`Found date (${result.metadata.date}). Fetching proper texts...`);
-            try {
-                const enrichedItems = await enrichLiturgyItems(
-                    result.items, 
-                    result.metadata.date, 
-                    result.metadata.occasion || 'Mass'
-                );
-                setItems(enrichedItems);
-            } catch (enrichError) {
-                console.warn("Auto-enrich failed", enrichError);
-            }
-        }
-        setImportStatus("Import Complete!");
+        setItems([...items, ...result.items]);
+        setImportStatus("Import complete!");
         await new Promise(r => setTimeout(r, 1500));
       } catch (err: any) {
         console.error(err);
@@ -296,114 +183,15 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, metad
     }
   };
 
-  const handleOrdinarySettingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newSetting = e.target.value;
-      setMetadata(prev => ({ ...prev, ordinarySetting: newSetting }));
-      
-      setItems(prevItems => prevItems.map(item => {
-          // Propagate setting to all Ordinaries except Credo (which usually stays Credo III)
-          const isOrdinary = item.type === 'ordinary';
-          const isCredo = item.title.toLowerCase().includes('credo') || item.title.toLowerCase().includes('creed');
-          
-          if (isOrdinary && !isCredo) {
-              return {
-                  ...item,
-                  metadata: {
-                      ...item.metadata,
-                      setting: newSetting
-                  }
-              };
-          }
-          return item;
-      }));
-  };
-
   return (
-    <div className="no-print flex flex-col h-full bg-white/95 backdrop-blur-xl border-r border-gray-200/50 shadow-2xl z-10 w-[420px] flex-shrink-0 relative">
+    <div className="no-print flex flex-col h-full bg-white/95 backdrop-blur-xl border-l border-gray-200/50 shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 w-[380px] flex-shrink-0 relative">
       <input type="file" ref={fileInputRef} onChange={handlePdfUpload} accept="application/pdf" className="hidden" />
-      {showFeastModal && (
-        <div className="absolute inset-0 z-50 bg-black/10 backdrop-blur-[1px] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-sm overflow-hidden">
-                <div className="bg-church-50 p-3 border-b border-gray-100 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-church-800">Select Liturgy</h3>
-                    <button onClick={() => setShowFeastModal(false)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-                </div>
-                <div className="p-2 max-h-64 overflow-y-auto">
-                    <div className="space-y-1">
-                        {feastOptions.map((feast, i) => (
-                            <button key={i} onClick={() => handleSelectFeast(feast)} className="w-full text-left px-3 py-2 text-sm rounded hover:bg-church-50 text-gray-700 hover:text-church-800 transition-colors flex items-center justify-between group">
-                                <span>{feast}</span>
-                                <Wand2 size={12} className="opacity-0 group-hover:opacity-100 text-church-500" />
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-      )}
       <div className="flex bg-gray-50/80 p-1.5 gap-1 border-b border-gray-200/50">
         <button onClick={() => setActiveTab('build')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'build' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><GripVertical size={16} /> Builder</button>
         <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'chat' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><MessageSquare size={16} /> Chat</button>
-        <button onClick={() => setActiveTab('settings')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'settings' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><Settings size={16} /> Details</button>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col">
-        {activeTab === 'settings' && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-300">
-             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Mass Details</h3>
-                <div className="flex gap-1">
-                    <button onClick={undo} disabled={!canUndo} className="p-1.5 border border-gray-200 bg-white rounded-md shadow-sm text-gray-600 hover:text-church-700 hover:shadow disabled:opacity-30 transition-all" title="Undo"><Undo2 size={14}/></button>
-                    <button onClick={resetApp} className="p-1.5 border border-gray-200 bg-white rounded-md shadow-sm text-gray-600 hover:text-red-600 hover:shadow transition-all" title="Reset All Content & Layout"><RotateCcw size={14}/></button>
-                </div>
-             </div>
-             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Church Name</label>
-                <input type="text" value={metadata.churchName} onChange={(e) => setMetadata({...metadata, churchName: e.target.value})} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Date</label>
-                  <div className="relative flex items-center">
-                    <input type="date" value={metadata.date} onChange={(e) => setMetadata({...metadata, date: e.target.value})} className="w-full border border-gray-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
-                    <button onClick={handleDateLookup} disabled={isLookingUp === 'feast'} className="bg-church-100 border border-l-0 border-church-200 text-church-700 p-2 rounded-r hover:bg-church-200 transition-colors">
-                        {isLookingUp === 'feast' ? <Loader2 size={16} className="animate-spin"/> : <Wand2 size={16} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Time</label>
-                  <input type="text" value={metadata.time} onChange={(e) => setMetadata({...metadata, time: e.target.value})} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Occasion / Feast</label>
-                <div className="relative flex items-center">
-                    <input type="text" placeholder="e.g. 3rd Sunday of Advent" value={metadata.occasion} onChange={(e) => setMetadata({...metadata, occasion: e.target.value})} className="w-full border border-gray-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
-                     <button onClick={handleFeastLookup} disabled={isLookingUp === 'date'} className="bg-gray-100 border border-l-0 border-gray-300 text-gray-600 p-2 rounded-r hover:bg-gray-200 transition-colors">
-                        {isLookingUp === 'date' ? <Loader2 size={16} className="animate-spin"/> : <Search size={16} />}
-                    </button>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Mass Ordinary Setting</label>
-                <div className="relative">
-                    <input list="ordinary-settings" type="text" value={metadata.ordinarySetting} onChange={handleOrdinarySettingChange} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" placeholder="Select or type a setting..." />
-                    <datalist id="ordinary-settings">{COMMON_ORDINARIES.map(o => <option key={o} value={o} />)}</datalist>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Celebrant</label>
-                <input type="text" value={metadata.celebrant} onChange={(e) => setMetadata({...metadata, celebrant: e.target.value})} className="w-full bg-gray-50 border border-gray-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
-              </div>
-             </div>
-             <div className="pt-4 border-t border-gray-100">
-                <button onClick={handleAutoPopulate} disabled={isGenerating} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-church-600 to-church-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 disabled:transform-none">
-                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <><Wand2 size={16} /> Auto-Populate Propers</>}
-                </button>
-             </div>
-          </div>
-        )}
+
         {activeTab === 'chat' && (
             <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
                 <div className="flex items-center justify-between pb-2 border-b border-gray-100 mb-2">

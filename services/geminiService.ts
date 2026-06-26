@@ -2,11 +2,17 @@ import { GoogleGenAI, Type, Schema, GenerateContentResponse } from "@google/gena
 import { GeneratedProper, LiturgyItem, MassMetadata } from '../types';
 
 async function fetchFromGeminiProxy(request: any): Promise<GenerateContentResponse> {
+    const customKey = localStorage.getItem('custom_gemini_api_key');
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+    };
+    if (customKey) {
+        headers['x-api-key'] = customKey;
+    }
+
     const response = await fetch('/api/gemini', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify(request)
     });
     const data = await response.json();

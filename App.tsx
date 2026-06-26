@@ -1,5 +1,6 @@
 
 import React, { useState, useCallback } from 'react';
+import { DetailsPanel } from './components/DetailsPanel';
 import { EditorPanel } from './components/EditorPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { LiturgyItem, MassMetadata, PageSettings } from './types';
@@ -45,15 +46,12 @@ const App: React.FC = () => {
   return (
     <div id="app-container" className="flex h-screen w-screen overflow-hidden bg-gradient-to-br from-stone-50 to-stone-200 text-stone-900">
       <div className="flex h-full w-full">
-        <EditorPanel 
-          items={items} 
-          setItems={setItems} 
+        <DetailsPanel 
+          items={items}
+          setItems={setItems}
           metadata={metadata}
           setMetadata={setMetadata}
           saveHistory={saveHistory}
-          undo={undo}
-          canUndo={history.length > 0}
-          resetApp={resetApp}
         />
         <PreviewPanel 
           items={items} 
@@ -61,6 +59,14 @@ const App: React.FC = () => {
           metadata={metadata}
           pageSettings={pageSettings}
           setPageSettings={setPageSettings}
+        />
+        <EditorPanel 
+          items={items} 
+          setItems={setItems} 
+          saveHistory={saveHistory}
+          undo={undo}
+          canUndo={history.length > 0}
+          resetApp={resetApp}
         />
       </div>
     </div>
