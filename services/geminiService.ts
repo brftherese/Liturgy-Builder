@@ -70,20 +70,20 @@ export async function generateContentWithFallback(request: any): Promise<Generat
             throw new Error(`Google AI Error: ${getFriendlyErrorMessage(error)}`);
         }
         
-        // Smart Retry Logic: If it's a short RPM quota hit, wait and retry the original model
-        if (isRateLimit) {
+        // Smart Retry Logic: If it's a short RPM quota hit, wait and retry the original model.
+        // SKIP if daily quota is exhausted — waiting 65s won't help at all.
+        if (isRateLimit && !msg.includes('PerDay')) {
             const retryMatch = msg.match(/Please retry in ([\d\.]+)s/i);
             if (retryMatch && retryMatch[1]) {
                 const delaySecs = parseFloat(retryMatch[1]);
                 if (delaySecs > 0 && delaySecs <= 65) {
-                    console.warn(`Smart Retry: Waiting ${delaySecs} seconds for ${request.model} to cool down...`);
-                    // Wait the requested delay plus a 1-second buffer
+                    console.warn(`Smart Retry: Waiting ${delaySecs}s for ${request.model} to cool down (Per-Minute limit)...`);
                     await new Promise(resolve => setTimeout(resolve, delaySecs * 1000 + 1000));
                     try {
                         console.warn(`Retrying ${request.model} after cooldown...`);
                         return await withTimeout(ai.models.generateContent(request) as Promise<GenerateContentResponse>, 60000);
                     } catch (retryErr: any) {
-                        console.warn(`${request.model} failed again on retry (${retryErr?.message}). Moving to fallback chain...`);
+                        console.warn(`${request.model} failed again on retry. Moving to fallback chain...`);
                         failureReasons.push(`[${request.model} Retry] ${getFriendlyErrorMessage(retryErr)}`);
                     }
                 }
@@ -92,14 +92,10 @@ export async function generateContentWithFallback(request: any): Promise<Generat
         
         const isTranslation = request.model === 'gemini-3.1-flash-lite' || (typeof request.contents === 'string' && request.contents.includes('Translate the following Latin'));
         
-        // Fallback chain: use pro-preview for heavy tasks, otherwise use 2.5-flash
-        let fallbacks: string[] = [];
-        if (isTranslation) {
-            fallbacks = ['gemini-2.5-flash'];
-        } else {
-            fallbacks = ['gemini-3.1-pro-preview', 'gemini-2.5-flash'];
-        }
-        fallbacks = fallbacks.filter(m => m !== request.model);
+        // Fallback chain: gemini-3.1-pro-preview is NOT available on the free tier (limit: 0).
+        // Available models: gemini-3.5-flash, gemini-2.5-flash, gemini-3.1-flash-lite
+        const fallbacks = ['gemini-2.5-flash', 'gemini-3.5-flash']
+            .filter(m => m !== request.model);
         
         for (const fallbackModel of fallbacks) {
             console.warn(`Gemini API Busy on previous model. Falling back to ${fallbackModel}...`);
@@ -596,7 +592,7 @@ export const importLiturgyFromPdf = async (base64Pdf: string): Promise<{ items: 
 
   try {
     const response = await generateContentWithFallback({
-      model: 'gemini-3.1-pro-preview',
+      model: 'gemini-2.5-flash',
       contents: [
         { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
         { text: prompt }
