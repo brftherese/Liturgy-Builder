@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LiturgyItem, MassMetadata } from '../types';
-import { Wand2, Search, Loader2, Key, X } from 'lucide-react';
+import { Wand2, Search, Loader2, Key, X, FileUp, BrainCircuit } from 'lucide-react';
 import { COMMON_ORDINARIES } from '../constants';
-import { fetchDailyPropers, resolveLiturgicalDay } from '../services/geminiService';
+import { fetchDailyPropers, resolveLiturgicalDay, importLiturgyFromPdf, enrichLiturgyItems } from '../services/geminiService';
 
 interface DetailsPanelProps {
   items: LiturgyItem[];
@@ -22,9 +22,12 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
   const [apiKey, setApiKey] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<string>(""); 
   const [isLookingUp, setIsLookingUp] = useState<'date' | 'feast' | null>(null);
   const [feastOptions, setFeastOptions] = useState<string[]>([]);
   const [showFeastModal, setShowFeastModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const savedKey = localStorage.getItem('custom_gemini_api_key');
@@ -149,8 +152,49 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
     await generatePropers(metadata.date, feast);
   };
 
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert("Please upload a valid PDF file.");
+      return;
+    }
+    setIsImporting(true);
+    setImportStatus("Uploading & Analyzing structure...");
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const base64String = (e.target?.result as string).split(',')[1];
+        const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error("Request timed out.")), 120000)
+        );
+        const result = await Promise.race([
+            importLiturgyFromPdf(base64String),
+            timeoutPromise
+        ]);
+        saveHistory();
+        setItems([...items, ...result.items]);
+        setImportStatus("Import complete!");
+        await new Promise(r => setTimeout(r, 1500));
+      } catch (err: any) {
+        console.error(err);
+        alert(err.message || "Failed to process PDF.");
+      } finally {
+        setIsImporting(false);
+        setImportStatus("");
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
     <div className="w-[320px] bg-white/95 backdrop-blur-xl border-r border-stone-200/50 shadow-2xl flex flex-col z-20 shrink-0 relative">
+      <input type="file" ref={fileInputRef} onChange={handlePdfUpload} accept="application/pdf" className="hidden" />
       {showFeastModal && (
         <div className="absolute inset-0 z-50 bg-black/10 backdrop-blur-[1px] flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-lg shadow-xl border border-stone-200 w-full max-w-sm overflow-hidden">
@@ -225,10 +269,21 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
               </div>
           </div>
           
-          <div className="pt-4 border-t border-stone-100">
-             <button onClick={handleAutoPopulate} disabled={isGenerating} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-church-600 to-church-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 disabled:transform-none">
+          
+          <div className="pt-4 border-t border-stone-100 space-y-3">
+             <button onClick={handleAutoPopulate} disabled={isGenerating || isImporting} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-church-600 to-church-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 disabled:transform-none">
                {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <><Wand2 size={16} /> Auto-Populate Propers</>}
              </button>
+             
+             <button onClick={triggerFileUpload} disabled={isImporting || isGenerating} className="w-full flex items-center justify-center gap-2 bg-stone-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-70 disabled:transform-none">
+               {isImporting ? <Loader2 size={14} className="animate-spin"/> : <FileUp size={14} />} {isImporting ? "Processing PDF..." : "Import from PDF"}
+             </button>
+             
+             {isImporting && importStatus && (
+                <div className="bg-church-50 rounded-md p-3 border border-church-100 shadow-sm animate-in fade-in slide-in-from-top-1">
+                    <div className="flex items-center gap-2 text-xs font-medium text-church-800"><BrainCircuit size={14} className="text-church-600 animate-pulse" /><span>{importStatus}</span></div>
+                </div>
+             )}
           </div>
 
           {/* API Settings Section */}

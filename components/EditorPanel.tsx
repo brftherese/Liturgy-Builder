@@ -19,8 +19,6 @@ interface ChatMessage {
 }
 
 export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveHistory, undo, canUndo, resetApp }) => {
-  const [isImporting, setIsImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState<string>(""); 
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'build' | 'chat'>('build');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -123,46 +121,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
   };
 
 
-  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.type !== 'application/pdf') {
-      alert("Please upload a valid PDF file.");
-      return;
-    }
-    setIsImporting(true);
-    setImportStatus("Uploading & Analyzing structure...");
-    setExpandedId(null);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const base64String = (e.target?.result as string).split(',')[1];
-        const timeoutPromise = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error("Request timed out.")), 120000)
-        );
-        const result = await Promise.race([
-            importLiturgyFromPdf(base64String),
-            timeoutPromise
-        ]);
-        saveHistory();
-        setItems([...items, ...result.items]);
-        setImportStatus("Import complete!");
-        await new Promise(r => setTimeout(r, 1500));
-      } catch (err: any) {
-        console.error(err);
-        alert(err.message || "Failed to process PDF.");
-      } finally {
-        setIsImporting(false);
-        setImportStatus("");
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const triggerFileUpload = () => {
-    fileInputRef.current?.click();
-  };
 
   const handleSendChat = async () => {
     if (!chatInput.trim() || isChatProcessing) return;
@@ -185,7 +143,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
 
   return (
     <div className="no-print flex flex-col h-full bg-white/95 backdrop-blur-xl border-l border-gray-200/50 shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 w-[380px] flex-shrink-0 relative">
-      <input type="file" ref={fileInputRef} onChange={handlePdfUpload} accept="application/pdf" className="hidden" />
       <div className="flex bg-gray-50/80 p-1.5 gap-1 border-b border-gray-200/50">
         <button onClick={() => setActiveTab('build')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'build' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><GripVertical size={16} /> Builder</button>
         <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'chat' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><MessageSquare size={16} /> Chat</button>
@@ -225,17 +182,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
         {activeTab === 'build' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
              <div className="flex gap-2 mb-3">
-                 <button onClick={triggerFileUpload} disabled={isImporting} className="flex-1 flex items-center justify-center gap-2 bg-stone-800 text-white p-2.5 rounded-lg shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-70 disabled:transform-none active:scale-95">
-                   {isImporting ? <Loader2 size={14} className="animate-spin"/> : <FileUp size={14} />} {isImporting ? "Processing..." : "Import PDF"}
-                 </button>
-                 <button onClick={undo} disabled={!canUndo} className="flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded-lg shadow-sm hover:shadow hover:bg-gray-50 hover:text-church-700 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-40 active:scale-95"><Undo2 size={14} /></button>
-                 <button onClick={resetApp} className="flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded-lg shadow-sm hover:shadow hover:bg-gray-50 hover:text-red-600 transition-all text-xs font-bold uppercase tracking-wide active:scale-95" title="Reset All Content & Layout"><RotateCcw size={14} /></button>
-            </div>
-            {isImporting && importStatus && (
-                <div className="bg-church-50 rounded-md p-3 border border-church-100 shadow-sm animate-in fade-in slide-in-from-top-1">
-                    <div className="flex items-center gap-2 text-xs font-medium text-church-800"><BrainCircuit size={14} className="text-church-600 animate-pulse" /><span>{importStatus}</span></div>
-                </div>
-             )}
+                 <button onClick={undo} disabled={!canUndo} className="flex-1 flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded-lg shadow-sm hover:shadow hover:bg-gray-50 hover:text-church-700 transition-all text-xs font-bold uppercase tracking-wide disabled:opacity-40 active:scale-95"><Undo2 size={14} /> Undo</button>
+                 <button onClick={resetApp} className="flex-1 flex items-center justify-center gap-2 bg-white text-gray-600 border border-gray-200 p-2.5 rounded-lg shadow-sm hover:shadow hover:bg-gray-50 hover:text-red-600 transition-all text-xs font-bold uppercase tracking-wide active:scale-95" title="Reset All Content & Layout"><RotateCcw size={14} /> Clear All</button>
+             </div>
             <div className="grid grid-cols-5 gap-2">
               <div draggable onDragStart={(e) => handleDragStart(e, 'header')} onDragEnd={handleDragEnd} onClick={() => handleAddItem('header')} className="cursor-grab active:cursor-grabbing flex flex-col items-center justify-center p-2 rounded border border-gray-200 hover:bg-church-50 hover:border-church-300 transition-all gap-1 text-xs font-medium text-gray-600 select-none"><TypeIcon size={16} className="text-church-600 pointer-events-none"/> Title</div>
               <div draggable onDragStart={(e) => handleDragStart(e, 'hymn')} onDragEnd={handleDragEnd} onClick={() => handleAddItem('hymn')} className="cursor-grab active:cursor-grabbing flex flex-col items-center justify-center p-2 rounded border border-gray-200 hover:bg-church-50 hover:border-church-300 transition-all gap-1 text-xs font-medium text-gray-600 select-none"><Music size={16} className="text-church-600 pointer-events-none"/> Hymn</div>
