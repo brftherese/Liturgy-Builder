@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "sans-serif";
+  --font-serif: "Merriweather", "serif";
+  --font-display: "Cinzel", "serif";
+  
+  --color-church-50: #fcfbf9;
+  --color-church-100: #f6f3ef;
+  --color-church-200: #ede6dd;
+  --color-church-300: #e0d1c1;
+  --color-church-400: #d1bda3;
+  --color-church-500: #ac8e68;
+  --color-church-600: #9d7d59;
+  --color-church-700: #836649;
+  --color-church-800: #6d5540;
+  --color-church-900: #594636;
+}
+
+/* Ensure items don't split awkwardly across pages */
+.avoid-break {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  /* RESET ALL CONTAINERS */
+  html, body, #root, #app-container {
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    overflow: visible !important;
+    background: white !important;
+    position: static !important;
+    display: block !important;
+  }
+
+  /* HIDE EVERYTHING BY DEFAULT */
+  body * {
+    visibility: hidden;
+  }
+
+  /* SHOW ONLY THE PRINTABLE CONTENT */
+  /* We target the class added in PreviewPanel and all its children */
+  .printable-content, 
+  .printable-content * {
+    visibility: visible;
+  }
+
+  /* POSITION THE CONTENT */
+  .printable-content {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important; /* Remove zoom scaling */
+  }
+
+  /* Explicitly hide UI elements if they persist */
+  .no-print {
+    display: none !important;
+  }
+}

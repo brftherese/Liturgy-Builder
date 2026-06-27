@@ -22,6 +22,15 @@ async function fetchFromGeminiProxy(request: any): Promise<GenerateContentRespon
         Object.assign(error, data.details || {});
         throw error;
     }
+    
+    // The Google SDK adds a .text getter, which is lost when proxied through JSON.
+    // We reconstruct it here for compatibility with existing code.
+    if (data.candidates?.[0]?.content?.parts) {
+        Object.defineProperty(data, 'text', {
+            get: () => data.candidates[0].content.parts.map((p: any) => p.text || '').join('')
+        });
+    }
+
     return data;
 }
 async function fetchOllama(prompt: string, model: string, requireJson: boolean): Promise<string> {
@@ -343,12 +352,6 @@ const isLatinText = (text: string): boolean => {
 };
 
 export const fetchDailyPropers = async (date: string, occasion?: string): Promise<GeneratedProper[]> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please configure the environment.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
   const prompt = `
     You are a liturgical assistant.
     Target Date: ${date}. 
@@ -447,10 +450,8 @@ export const fetchDailyPropers = async (date: string, occasion?: string): Promis
 };
 
 export const translateText = async (text: string): Promise<string> => {
-  if (!process.env.API_KEY) return "Error: No API Key";
   if (!text) return "";
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await generateContentWithFallback({
       model: 'gemini-3.1-flash-lite',
@@ -472,10 +473,8 @@ export const translateText = async (text: string): Promise<string> => {
 };
 
 export const translateTexts = async (texts: string[]): Promise<string[]> => {
-  if (!process.env.API_KEY) return [];
   if (!texts || texts.length === 0) return [];
   
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const schema: Schema = {
     type: Type.ARRAY,
     items: { type: Type.STRING }
@@ -515,9 +514,6 @@ export const resolveLiturgicalDay = async (
   type: 'date_to_feast' | 'feast_to_date',
   value: string
 ): Promise<{ date?: string, feasts?: string[], suggestedMassSetting?: string }> => {
-  if (!process.env.API_KEY) throw new Error("API Key missing");
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const currentYear = new Date().getFullYear();
 
   let prompt = "";
@@ -554,9 +550,6 @@ export const resolveLiturgicalDay = async (
 };
 
 export const summarizeReadings = async (items: LiturgyItem[]): Promise<LiturgyItem[]> => {
-  if (!process.env.API_KEY) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
   const readingItems = items.filter(i => i.type === 'reading' && i.content.length > 100);
   if (readingItems.length === 0) return items;
 
@@ -598,9 +591,6 @@ export const summarizeReadings = async (items: LiturgyItem[]): Promise<LiturgyIt
 }
 
 export const importLiturgyFromPdf = async (base64Pdf: string): Promise<{ items: LiturgyItem[], metadata: MassMetadata }> => {
-  if (!process.env.API_KEY) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
   const prompt = `
     Analyze the uploaded PDF (Liturgy Order of Worship).
     
@@ -967,9 +957,6 @@ export const enrichLiturgyItems = async (items: LiturgyItem[], date: string, occ
 };
 
 export const processLiturgyEdit = async (currentItems: LiturgyItem[], userInstruction: string): Promise<{ items: LiturgyItem[], reply: string }> => {
-  if (!process.env.API_KEY) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
   const prompt = `
     You are an expert Catholic Liturgy Editor.
     

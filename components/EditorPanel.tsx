@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LiturgyItem, ItemType, MassMetadata, PageSettings } from '../types';
-import { Trash2, ArrowUp, ArrowDown, Wand2, Calendar, GripVertical, Settings, Type as TypeIcon, Languages, BookOpen, Music, Search, Loader2, X, FileUp, Scroll, BrainCircuit, MessageSquare, Send, RotateCcw, Undo2, ChevronRight, ChevronDown, PlusCircle } from 'lucide-react';
+import { Trash2, ArrowUp, ArrowDown, Wand2, Calendar, GripVertical, Settings, Type as TypeIcon, Languages, BookOpen, Music, Search, Loader2, X, FileUp, Scroll, BrainCircuit, MessageSquare, Send, RotateCcw, Undo2, ChevronRight, ChevronDown, ChevronLeft, PlusCircle } from 'lucide-react';
 import { fetchDailyPropers, translateText, resolveLiturgicalDay, importLiturgyFromPdf, enrichLiturgyItems, processLiturgyEdit } from '../services/geminiService';
 import { COMMON_ORDINARIES } from '../constants';
 
@@ -22,6 +22,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
   const [translatingId, setTranslatingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'build' | 'chat'>('build');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +75,20 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
     e.preventDefault();
     setDragOverIndex(null);
     setIsDragging(false);
+
+    const dragIndexStr = e.dataTransfer.getData('dragIndex');
+    if (dragIndexStr) {
+      const dragIndex = parseInt(dragIndexStr, 10);
+      if (dragIndex === index || dragIndex === index - 1 && index > dragIndex) return;
+      saveHistory();
+      const newItems = [...items];
+      const [movedItem] = newItems.splice(dragIndex, 1);
+      const targetIndex = index > dragIndex ? index - 1 : index;
+      newItems.splice(targetIndex, 0, movedItem);
+      setItems(newItems);
+      return;
+    }
+
     const type = e.dataTransfer.getData('itemType') as ItemType;
     if (!type) return;
 
@@ -142,12 +157,22 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
   };
 
   return (
-    <div className="no-print flex flex-col h-full bg-white/95 backdrop-blur-xl border-l border-gray-200/50 shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] z-10 w-[380px] flex-shrink-0 relative">
-      <div className="flex bg-gray-50/80 p-1.5 gap-1 border-b border-gray-200/50">
-        <button onClick={() => setActiveTab('build')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'build' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><GripVertical size={16} /> Builder</button>
-        <button onClick={() => setActiveTab('chat')} className={`flex-1 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'chat' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><MessageSquare size={16} /> Chat</button>
+    <div className={`relative h-full z-10 flex-shrink-0 no-print flex flex-col bg-white/95 backdrop-blur-xl border-l border-gray-200/50 shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] transition-all duration-300 ${isCollapsed ? 'w-12' : 'w-[380px]'}`}>
+      <div className="h-14 border-b border-gray-200/50 flex items-center bg-gray-50/80 px-2 shrink-0">
+         <button onClick={() => setIsCollapsed(!isCollapsed)} className={`flex items-center justify-center w-8 h-8 rounded-md text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors ${isCollapsed ? 'mx-auto' : 'mr-2'}`} title={isCollapsed ? "Expand Editor" : "Collapse Editor"}>
+             {isCollapsed ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
+         </button>
+         {!isCollapsed && (
+            <div className="flex-1 flex gap-1 h-10">
+                <button onClick={() => setActiveTab('build')} className={`flex-1 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'build' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><GripVertical size={16} /> Builder</button>
+                <button onClick={() => setActiveTab('chat')} className={`flex-1 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all duration-200 ${activeTab === 'chat' ? 'text-church-800 bg-white shadow-sm ring-1 ring-black/5' : 'text-gray-500 hover:text-church-600 hover:bg-gray-200/50'}`}><MessageSquare size={16} /> Chat</button>
+            </div>
+         )}
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col">
+
+      <div className={`flex-1 overflow-hidden relative transition-opacity duration-200 ${isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className="w-[380px] h-full flex flex-col absolute inset-0">
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 flex flex-col">
 
         {activeTab === 'chat' && (
             <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
@@ -198,7 +223,16 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
                 return (
                 <React.Fragment key={item.id}>
                     <div onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }} onDrop={(e) => handleDrop(e, index)} className={`transition-all duration-200 ${dragOverIndex === index ? 'h-8 bg-church-50 border-2 border-dashed border-church-400 rounded-md my-1 flex items-center justify-center text-xs text-church-600 font-medium' : isDragging ? 'h-2 my-0.5 rounded bg-gray-50 border border-dashed border-gray-300/50' : 'h-0 opacity-0 overflow-hidden'}`}>{dragOverIndex === index && <span className="flex items-center gap-1 pointer-events-none"><PlusCircle size={12}/> Drop to Insert</span>}</div>
-                    <div className={`group bg-white border border-gray-200/70 rounded-xl shadow-sm hover:shadow transition-all duration-200 overflow-hidden ${isExpanded ? 'ring-2 ring-church-500/20 border-church-300 shadow-md my-3' : 'hover:border-church-300'}`}>
+                    <div 
+                      draggable 
+                      onDragStart={(e) => { 
+                         e.dataTransfer.setData('dragIndex', index.toString()); 
+                         e.dataTransfer.effectAllowed = 'move';
+                         setExpandedId(null);
+                         setIsDragging(true);
+                      }}
+                      onDragEnd={handleDragEnd}
+                      className={`group bg-white border border-gray-200/70 rounded-xl shadow-sm hover:shadow transition-all duration-200 overflow-hidden ${isExpanded ? 'ring-2 ring-church-500/20 border-church-300 shadow-md my-3 cursor-default' : 'hover:border-church-300 cursor-grab active:cursor-grabbing'}`}>
                       <div onClick={() => setExpandedId(isExpanded ? null : item.id)} className={`px-3 py-2 flex items-center justify-between cursor-pointer select-none transition-colors ${isExpanded ? 'bg-gray-50/80 border-b border-gray-200/60 py-2.5' : 'bg-white hover:bg-gray-50/50'}`}>
                         <div className="flex items-center gap-2 overflow-hidden w-full">
                           <span className="text-gray-400 shrink-0">{isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</span>
@@ -239,6 +273,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ items, setItems, saveH
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );

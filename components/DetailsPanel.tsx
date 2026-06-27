@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LiturgyItem, MassMetadata } from '../types';
-import { Wand2, Search, Loader2, Key, X, FileUp, BrainCircuit } from 'lucide-react';
+import { Wand2, Search, Loader2, Key, X, FileUp, BrainCircuit, ChevronLeft, ChevronRight } from 'lucide-react';
 import { COMMON_ORDINARIES } from '../constants';
 import { fetchDailyPropers, resolveLiturgicalDay, importLiturgyFromPdf, enrichLiturgyItems } from '../services/geminiService';
 
@@ -27,6 +27,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
   const [isLookingUp, setIsLookingUp] = useState<'date' | 'feast' | null>(null);
   const [feastOptions, setFeastOptions] = useState<string[]>([]);
   const [showFeastModal, setShowFeastModal] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -193,9 +194,27 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
   };
 
   return (
-    <div className="w-[320px] bg-white/95 backdrop-blur-xl border-r border-stone-200/50 shadow-2xl flex flex-col z-20 shrink-0 relative">
-      <input type="file" ref={fileInputRef} onChange={handlePdfUpload} accept="application/pdf" className="hidden" />
-      {showFeastModal && (
+    <div className={`relative h-full z-20 flex-shrink-0 no-print flex flex-col bg-white/95 backdrop-blur-xl border-r border-stone-200/50 shadow-2xl transition-all duration-300 ${isCollapsed ? 'w-12' : 'w-[320px]'}`}>
+      <div className="h-14 border-b border-stone-200/50 flex items-center bg-stone-50/80 px-2 shrink-0">
+         {!isCollapsed && (
+             <div className="flex items-center gap-3 flex-1 overflow-hidden ml-1">
+                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-church-500 to-church-700 flex items-center justify-center shadow-md shrink-0">
+                    <Wand2 size={16} className="text-white" />
+                 </div>
+                 <div className="truncate">
+                    <h1 className="text-base font-bold text-stone-800 leading-tight">Details</h1>
+                 </div>
+             </div>
+         )}
+         <button onClick={() => setIsCollapsed(!isCollapsed)} className={`flex items-center justify-center w-8 h-8 rounded-md text-stone-500 hover:text-stone-800 hover:bg-stone-200 transition-colors ${isCollapsed ? 'mx-auto' : ''}`} title={isCollapsed ? "Expand Details" : "Collapse Details"}>
+             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+         </button>
+      </div>
+
+      <div className={`flex-1 overflow-hidden relative transition-opacity duration-200 ${isCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className="w-[320px] h-full flex flex-col absolute inset-0">
+          <input type="file" ref={fileInputRef} onChange={handlePdfUpload} accept="application/pdf" className="hidden" />
+          {showFeastModal && (
         <div className="absolute inset-0 z-50 bg-black/10 backdrop-blur-[1px] flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-lg shadow-xl border border-stone-200 w-full max-w-sm overflow-hidden">
                 <div className="bg-church-50 p-3 border-b border-stone-100 flex items-center justify-between">
@@ -216,67 +235,57 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
         </div>
       )}
 
-      <div className="p-4 border-b border-stone-200/50 flex items-center gap-3 bg-stone-50/80">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-church-500 to-church-700 flex items-center justify-center shadow-md">
-          <Wand2 size={18} className="text-white" />
-        </div>
-        <div>
-          <h1 className="text-lg font-bold text-stone-800 leading-tight">Details</h1>
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-stone-500">Mass Settings</p>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <div className="space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-4">
+          <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Church Name</label>
-                <input type="text" value={metadata.churchName} onChange={(e) => setMetadata({...metadata, churchName: e.target.value})} className="w-full bg-stone-50 border border-stone-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
+                <label className="block text-[10px] uppercase tracking-wide font-bold text-stone-500 mb-0.5">Church Name</label>
+                <input type="text" value={metadata.churchName} onChange={(e) => setMetadata({...metadata, churchName: e.target.value})} className="w-full bg-stone-50 border border-stone-200/80 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                  <div>
-                  <label className="block text-xs font-semibold text-stone-500 mb-1">Date</label>
+                  <label className="block text-[10px] uppercase tracking-wide font-bold text-stone-500 mb-0.5">Date</label>
                   <div className="relative flex items-center">
-                    <input type="date" value={metadata.date} onChange={(e) => setMetadata({...metadata, date: e.target.value})} className="w-full border border-stone-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
-                    <button onClick={handleDateLookup} disabled={isLookingUp === 'feast'} className="bg-church-100 border border-l-0 border-church-200 text-church-700 p-2 rounded-r hover:bg-church-200 transition-colors">
-                        {isLookingUp === 'feast' ? <Loader2 size={16} className="animate-spin"/> : <Wand2 size={16} />}
+                    <input type="date" value={metadata.date} onChange={(e) => setMetadata({...metadata, date: e.target.value})} className="w-full border border-stone-300 rounded-l px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-church-500" />
+                    <button onClick={handleDateLookup} disabled={isLookingUp === 'feast'} className="bg-church-100 border border-l-0 border-church-200 text-church-700 px-2 py-1.5 rounded-r hover:bg-church-200 transition-colors flex items-center justify-center">
+                        {isLookingUp === 'feast' ? <Loader2 size={14} className="animate-spin"/> : <Wand2 size={14} />}
                     </button>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-stone-500 mb-1">Time</label>
-                  <input type="text" value={metadata.time} onChange={(e) => setMetadata({...metadata, time: e.target.value})} className="w-full bg-stone-50 border border-stone-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
+                  <label className="block text-[10px] uppercase tracking-wide font-bold text-stone-500 mb-0.5">Time</label>
+                  <input type="text" value={metadata.time} onChange={(e) => setMetadata({...metadata, time: e.target.value})} className="w-full bg-stone-50 border border-stone-200/80 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Occasion / Feast</label>
+                <label className="block text-[10px] uppercase tracking-wide font-bold text-stone-500 mb-0.5">Occasion / Feast</label>
                 <div className="relative flex items-center">
-                    <input type="text" placeholder="e.g. 3rd Sunday of Advent" value={metadata.occasion} onChange={(e) => setMetadata({...metadata, occasion: e.target.value})} className="w-full border border-stone-300 rounded-l px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500" />
-                     <button onClick={handleFeastLookup} disabled={isLookingUp === 'date'} className="bg-stone-100 border border-l-0 border-stone-300 text-stone-600 p-2 rounded-r hover:bg-stone-200 transition-colors">
-                        {isLookingUp === 'date' ? <Loader2 size={16} className="animate-spin"/> : <Search size={16} />}
+                    <input type="text" placeholder="e.g. 3rd Sunday of Advent" value={metadata.occasion} onChange={(e) => setMetadata({...metadata, occasion: e.target.value})} className="w-full border border-stone-300 rounded-l px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-church-500" />
+                     <button onClick={handleFeastLookup} disabled={isLookingUp === 'date'} className="bg-stone-100 border border-l-0 border-stone-300 text-stone-600 px-2 py-1.5 rounded-r hover:bg-stone-200 transition-colors flex items-center justify-center">
+                        {isLookingUp === 'date' ? <Loader2 size={14} className="animate-spin"/> : <Search size={14} />}
                     </button>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Mass Ordinary Setting</label>
+                <label className="block text-[10px] uppercase tracking-wide font-bold text-stone-500 mb-0.5">Mass Ordinary Setting</label>
                 <div className="relative">
-                    <input list="ordinary-settings" type="text" value={metadata.ordinarySetting} onChange={handleOrdinarySettingChange} className="w-full bg-stone-50 border border-stone-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" placeholder="Select or type a setting..." />
+                    <input list="ordinary-settings" type="text" value={metadata.ordinarySetting} onChange={handleOrdinarySettingChange} className="w-full bg-stone-50 border border-stone-200/80 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" placeholder="Select or type a setting..." />
                     <datalist id="ordinary-settings">{COMMON_ORDINARIES.map(o => <option key={o} value={o} />)}</datalist>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-stone-500 mb-1">Celebrant</label>
-                <input type="text" value={metadata.celebrant} onChange={(e) => setMetadata({...metadata, celebrant: e.target.value})} className="w-full bg-stone-50 border border-stone-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
+                <label className="block text-[10px] uppercase tracking-wide font-bold text-stone-500 mb-0.5">Celebrant</label>
+                <input type="text" value={metadata.celebrant} onChange={(e) => setMetadata({...metadata, celebrant: e.target.value})} className="w-full bg-stone-50 border border-stone-200/80 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner" />
               </div>
           </div>
           
           
-          <div className="pt-4 border-t border-stone-100 space-y-3">
-             <button onClick={handleAutoPopulate} disabled={isGenerating || isImporting} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-church-600 to-church-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-50 disabled:transform-none">
-               {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <><Wand2 size={16} /> Auto-Populate Propers</>}
+          <div className="pt-3 border-t border-stone-100 space-y-2">
+             <button onClick={handleAutoPopulate} disabled={isGenerating || isImporting} className="w-full flex items-center justify-center gap-1.5 bg-gradient-to-r from-church-600 to-church-800 text-white rounded py-2 shadow-sm hover:shadow hover:-translate-y-px text-xs font-medium transition-all active:scale-95 disabled:opacity-50 disabled:transform-none">
+               {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <><Wand2 size={14} /> Auto-Populate Propers</>}
              </button>
              
-             <button onClick={triggerFileUpload} disabled={isImporting || isGenerating} className="w-full flex items-center justify-center gap-2 bg-stone-800 text-white rounded-lg py-3 shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm font-medium transition-all active:scale-95 disabled:opacity-70 disabled:transform-none">
-               {isImporting ? <Loader2 size={14} className="animate-spin"/> : <FileUp size={14} />} {isImporting ? "Processing PDF..." : "Import from PDF"}
+             <button onClick={triggerFileUpload} disabled={isImporting || isGenerating} className="w-full flex items-center justify-center gap-1.5 bg-stone-800 text-white rounded py-2 shadow-sm hover:shadow hover:-translate-y-px text-xs font-medium transition-all active:scale-95 disabled:opacity-70 disabled:transform-none">
+               {isImporting ? <Loader2 size={12} className="animate-spin"/> : <FileUp size={12} />} {isImporting ? "Processing PDF..." : "Import from PDF"}
              </button>
              
              {isImporting && importStatus && (
@@ -286,15 +295,14 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
              )}
           </div>
 
-          {/* API Settings Section */}
-          <div className="pt-6 mt-6 border-t border-stone-100">
-             <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wide flex items-center gap-2 mb-3">
-                 <Key size={14} className="text-stone-400" /> API Settings
+          <div className="pt-4 mt-4 border-t border-stone-100">
+             <h3 className="text-xs font-bold text-stone-900 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                 <Key size={12} className="text-stone-400" /> API Settings
              </h3>
-             <p className="text-xs text-stone-500 mb-3 leading-relaxed">
+             <p className="text-[10px] text-stone-500 mb-2 leading-relaxed">
                  To bypass the server's free-tier limits, you can provide your own paid Gemini API key. This key never leaves your browser except when sending requests to the proxy.
              </p>
-             <div className="space-y-2">
+             <div className="space-y-1.5">
                  <input 
                     type="password" 
                     placeholder="AIzaSy..." 
@@ -310,6 +318,8 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                  </button>
              </div>
           </div>
+      </div>
+        </div>
       </div>
     </div>
   );

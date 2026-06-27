@@ -21,7 +21,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // Initialize Gemini
-const apiKey = process.env.API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || process.env.VITE_GEMINI_API_KEY || '';
 if (!apiKey) {
     console.warn('WARNING: API_KEY is not set in the environment variables. Ensure it is set before using the proxy.');
 }
@@ -67,7 +67,7 @@ app.post('/api/gemini', async (req, res) => {
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Fallback to index.html for React Router (SPA routing)
-app.get('*', (req, res, next) => {
+app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) {
         return next();
     }
