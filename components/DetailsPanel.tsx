@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LiturgyItem, MassMetadata } from '../types';
-import { Wand2, Search, Loader2, Key, X, FileUp, BrainCircuit, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wand2, BrainCircuit, FileUp, Key, ChevronLeft, ChevronRight, Loader2, Search, Github, X } from 'lucide-react';
 import { COMMON_ORDINARIES } from '../constants';
 import { fetchDailyPropers, resolveLiturgicalDay, importLiturgyFromPdf, enrichLiturgyItems } from '../services/geminiService';
 
@@ -25,7 +25,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string>(""); 
   const [isLookingUp, setIsLookingUp] = useState<'date' | 'feast' | null>(null);
-  const [feastOptions, setFeastOptions] = useState<string[]>([]);
+  const [feastOptions, setFeastOptions] = useState<{title: string, date?: string}[]>([]);
   const [showFeastModal, setShowFeastModal] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,7 +117,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
             setMetadata(prev => ({ ...prev, occasion: feast }));
             await generatePropers(metadata.date, feast, suggestedSetting);
         } else {
-            setFeastOptions(result.feasts);
+            setFeastOptions(result.feasts.map(f => ({ title: f })));
             setShowFeastModal(true);
         }
       } else {
@@ -135,10 +135,18 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
     setIsLookingUp('date');
     try {
       const result = await resolveLiturgicalDay('feast_to_date', metadata.occasion);
-      if (result.date) {
+      if (result.matches && result.matches.length > 0) {
+        if (result.matches.length === 1) {
+            const match = result.matches[0];
+            setMetadata(prev => ({ ...prev, occasion: match.feast, date: match.date }));
+        } else {
+            setFeastOptions(result.matches.map(m => ({ title: m.feast, date: m.date })));
+            setShowFeastModal(true);
+        }
+      } else if (result.date) {
         setMetadata(prev => ({ ...prev, date: result.date! }));
       } else {
-        alert("Could not find a date for this feast in the current year.");
+        alert("Could not find any matching feasts in the current year.");
       }
     } catch (e) {
       alert("Failed to lookup feast.");
@@ -147,10 +155,13 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
     }
   };
 
-  const handleSelectFeast = async (feast: string) => {
-    setMetadata(prev => ({ ...prev, occasion: feast }));
+  const handleSelectFeast = async (feastOption: {title: string, date?: string}) => {
+    const targetDate = feastOption.date || metadata.date;
+    setMetadata(prev => ({ ...prev, occasion: feastOption.title, date: targetDate }));
     setShowFeastModal(false);
-    await generatePropers(metadata.date, feast);
+    if (targetDate) {
+        await generatePropers(targetDate, feastOption.title);
+    }
   };
 
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,7 +236,10 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                     <div className="space-y-1">
                         {feastOptions.map((feast, i) => (
                             <button key={i} onClick={() => handleSelectFeast(feast)} className="w-full text-left px-3 py-2 text-sm rounded hover:bg-church-50 text-stone-700 hover:text-church-800 transition-colors flex items-center justify-between group">
-                                <span>{feast}</span>
+                                <div>
+                                    <span className="block font-medium">{feast.title}</span>
+                                    {feast.date && <span className="block text-[10px] text-stone-400 mt-0.5">{feast.date}</span>}
+                                </div>
                                 <Wand2 size={12} className="opacity-0 group-hover:opacity-100 text-church-500" />
                             </button>
                         ))}
@@ -300,7 +314,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                  <Key size={12} className="text-stone-400" /> API Settings
              </h3>
              <p className="text-[10px] text-stone-500 mb-2 leading-relaxed">
-                 To bypass the server's free-tier limits, you can provide your own paid Gemini API key. This key never leaves your browser except when sending requests to the proxy.
+                 To bypass the server's free-tier limits, you can provide your own paid <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-church-600 hover:underline">Gemini API key</a>. This key never leaves your browser except when sending requests to the proxy.
              </p>
              <div className="space-y-1.5">
                  <input 
@@ -310,6 +324,7 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                     onChange={(e) => setApiKey(e.target.value)} 
                     className="w-full bg-stone-50 border border-stone-200/80 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-church-500/20 focus:border-church-500 transition-all shadow-inner font-mono text-xs" 
                  />
+                 <p className="text-[9px] text-stone-400">Leave blank to use the server's default key.</p>
                  <button 
                     onClick={handleSaveKey} 
                     className="w-full bg-stone-800 text-white rounded-md py-2 text-xs font-semibold uppercase tracking-wide hover:bg-stone-700 transition-colors shadow-sm"
@@ -317,6 +332,13 @@ export const DetailsPanel: React.FC<DetailsPanelProps> = ({
                      {isSaved ? "Saved Locally (Update)" : "Save Key Locally"}
                  </button>
              </div>
+          </div>
+          
+          <div className="mt-6 mb-2 text-center">
+             <a href="https://github.com/brftherese/Liturgy-Builder" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-stone-400 hover:text-stone-600 transition-colors text-xs font-medium">
+                 <Github size={14} />
+                 View Source Code
+             </a>
           </div>
       </div>
         </div>
