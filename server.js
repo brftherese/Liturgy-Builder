@@ -15,8 +15,23 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
-app.use(cors());
+const allowedOrigins = [
+    'https://liturgy.saintignatius.us',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:13745' // The port used by this PM2 process
+];
+
+app.use(cors({
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl requests, or same-origin)
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    }
+}));
 // Increase JSON payload limit to handle base64 PDFs
 app.use(express.json({ limit: '50mb' }));
 
