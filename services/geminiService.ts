@@ -513,14 +513,14 @@ export const translateTexts = async (texts: string[]): Promise<string[]> => {
 export const resolveLiturgicalDay = async (
   type: 'date_to_feast' | 'feast_to_date',
   value: string
-): Promise<{ date?: string, feasts?: string[], suggestedMassSetting?: string }> => {
+): Promise<{ date?: string, feasts?: string[], suggestedMassSetting?: string, matches?: { feast: string, date: string }[] }> => {
   const currentYear = new Date().getFullYear();
 
   let prompt = "";
   if (type === 'date_to_feast') {
     prompt = `List all possible liturgical observances for Roman Catholic Church (USA) on ${value}. Return list of names. Suggest Gregorian Mass Ordinary (e.g. Mass VIII).`;
   } else {
-    prompt = `What is the date of "${value}" in ${currentYear}? Return YYYY-MM-DD.`;
+    prompt = `Find upcoming liturgical observances in the Roman Catholic Church matching or related to "${value}" in ${currentYear}. Return a list of matching feasts along with their upcoming date (YYYY-MM-DD) in the 'matches' array.`;
   }
 
   const schema: Schema = {
@@ -528,7 +528,18 @@ export const resolveLiturgicalDay = async (
     properties: {
       date: { type: Type.STRING },
       feasts: { type: Type.ARRAY, items: { type: Type.STRING } },
-      suggestedMassSetting: { type: Type.STRING }
+      suggestedMassSetting: { type: Type.STRING },
+      matches: {
+          type: Type.ARRAY,
+          items: {
+              type: Type.OBJECT,
+              properties: {
+                  feast: { type: Type.STRING },
+                  date: { type: Type.STRING }
+              },
+              required: ["feast", "date"]
+          }
+      }
     }
   };
 
